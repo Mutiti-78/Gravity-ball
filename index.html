@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+content="width=device-width,initial-scale=1.0,
+maximum-scale=1.0,user-scalable=no">
+
+<title>Lava Top - Checkpoint Parkuru</title>
+
+<style>
+*{
+    box-sizing:border-box;
+    user-select:none;
+    -webkit-user-select:none;
+    touch-action:none;
+}
+
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#160000;
+}
+
+canvas{
+    display:block;
+}
+
+.joystick{
+    position:fixed;
+    width:125px;
+    height:125px;
+    left:25px;
+    bottom:25px;
+    border-radius:50%;
+    background:rgba(255,255,255,.16);
+    border:3px solid rgba(255,255,255,.45);
+    z-index:10;
+}
+
+.stick{
+    position:absolute;
+    width:58px;
+    height:58px;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:rgba(255,255,255,.7);
+    border:2px solid white;
+}
+
+#jumpButton{
+    position:fixed;
+    right:30px;
+    bottom:40px;
+    width:100px;
+    height:100px;
+    border-radius:50%;
+    background:rgba(255,255,255,.25);
+    border:4px solid rgba(255,255,255,.7);
+    color:white;
+    font-family:Arial,sans-serif;
+    font-size:17px;
+    font-weight:bold;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:10;
+}
+
+#info{
+    position:fixed;
+    top:12px;
+    left:50%;
+    transform:translateX(-50%);
+    padding:8px 14px;
+    color:white;
+    background:rgba(0,0,0,.45);
+    border-radius:12px;
+    font-family:Arial,sans-serif;
+    font-size:14px;
+    z-index:20;
+    pointer-events:none;
+    white-space:nowrap;
+}
+
+#checkpoint{
+    position:fixed;
+    top:50px;
+    left:50%;
+    transform:translateX(-50%);
+    color:white;
+    font-family:Arial,sans-serif;
+    font-size:18px;
+    font-weight:bold;
+    z-index:20;
+    pointer-events:none;
+}
+
+#winScreen{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.84);
+    z-index:100;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    color:white;
+    text-align:center;
+    font-family:Arial,sans-serif;
+}
+
+#winScreen.show{
+    display:flex;
+}
+
+#winScreen .title{
+    font-size:38px;
+    font-weight:bold;
+    margin-bottom:15px;
+}
+
+#winScreen .sub{
+    font-size:20px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="info">
+    Sol: Hareket • Sağ: Zıpla
+</div>
+
+<div id="checkpoint">
+    🏁 Başlangıç
+</div>
+
+<div id="leftJoystick" class="joystick">
+    <div class="stick"></div>
+</div>
+
+<div id="jumpButton">
+    ZIPLA
+</div>
+
+<div id="winScreen">
+    <div class="title">🏆 BAŞARDIN!</div>
+    <div class="sub">Parkuru tamamladın!</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+
+/* ==========================================
+   SAHNE
+========================================== */
+
+const scene =
+    new THREE.Scene();
+
+scene.background =
+    new THREE.Color(0x180000);
+
+const camera =
+    new THREE.PerspectiveCamera(
+        70,
+        window.innerWidth /
+        window.innerHeight,
+        0.1,
+        2000
+    );
+
+const renderer =
+    new THREE.WebGLRenderer({
+        antialias:true
+    });
+
+renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+);
+
+renderer.setPixelRatio(
+    Math.min(
+        window.devicePixelRatio,
+        2
+    )
+);
+
+document.body.appendChild(
+    renderer.domElement
+);
+
+
+/* ==========================================
+   IŞIK
+========================================== */
+
+scene.add(
+    new THREE.AmbientLight(
+        0xffdddd,
+        0.7
+    )
+);
+
+const sun =
+    new THREE.DirectionalLight(
+        0xffffff,
+        1.25
+    );
+
+sun.position.set(
+    20,
+    50,
+    20
+);
+
+scene.add(sun);
+
+
+/* ==========================================
+   LAV
+========================================== */
+
+const lava =
+    new THREE.Mesh(
+        new THREE.PlaneGeometry(
+            3000,
+            3000
+        ),
+        new THREE.MeshStandardMaterial({
+            color:0xff2200,
+            emissive:0xff1800,
+            emissiveIntensity:.75,
+            roughness:.8
+        })
+    );
+
+lava.rotation.x =
+    -Math.PI / 2;
+
+lava.position.y =
+    -2;
+
+scene.add(lava);
+
+
+/* ==========================================
+   LAV ÇİZGİLERİ
+========================================== */
+
+const lavaLines =
+    new THREE.Group();
+
+scene.add(lavaLines);
+
+for(
+    let i=0;
+    i<300;
+    i++
+){
+
+    const line =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                .12,
+                .04,
+                5
+            ),
+            new THREE.MeshBasicMaterial({
+                color:0xffaa00
+            })
+        );
+
+    line.position.set(
+        (Math.random()-.5)*300,
+        -1.94,
+        (Math.random()-.5)*300
+    );
+
+    line.rotation.y =
+        Math.random()*Math.PI;
+
+    lavaLines.add(line);
+}
+
+
+/* ==========================================
+   PLATFORMLAR
+========================================== */
+
+const platforms = [];
+
+const PLATFORM_WIDTH = 6;
+const PLATFORM_DEPTH = 6;
+const PLATFORM_HEIGHT = .6;
+
+const TOTAL_PLATFORMS = 100;
+
+
+function createPlatform(
+    x,
+    y,
+    z,
+    width=PLATFORM_WIDTH,
+    depth=PLATFORM_DEPTH
+){
+
+    const mesh =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                width,
+                PLATFORM_HEIGHT,
+                depth
+            ),
+            new THREE.MeshStandardMaterial({
+                color:0x555555,
+                roughness:.8
+            })
+        );
+
+    mesh.position.set(
+        x,
+        y,
+        z
+    );
+
+    scene.add(mesh);
+
+    const data = {
+
+        mesh,
+
+        x,
+        y,
+        z,
+
+        width,
+        depth,
+
+        top:
+            y +
+            PLATFORM_HEIGHT/2,
+
+        bottom:
+            y -
+            PLATFORM_HEIGHT/2
+    };
+
+    platforms.push(data);
+
+    const edge =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                width+.06,
+                .08,
+                depth+.06
+            ),
+            new THREE.MeshBasicMaterial({
+                color:0xaaaaaa
+            })
+        );
+
+    edge.position.y =
+        PLATFORM_HEIGHT/2;
+
+    mesh.add(edge);
+
+    return data;
+}
+
+
+/* ==========================================
+   PARKUR OLUŞTURMA
+========================================== */
+
+let lastX = 0;
+let lastY = 1;
+let lastZ = 0;
+
+createPlatform(
+    0,
+    1,
+    0,
+    7,
+    7
+);
+
+for(
+    let i=1;
+    i<TOTAL_PLATFORMS;
+    i++
+){
+
+    const nextZ =
+        lastZ - 8.5;
+
+    const side =
+        Math.floor(
+            Math.random()*3
+        ) - 1;
+
+    let nextX =
+        lastX + side*2;
+
+    nextX =
+        THREE.MathUtils.clamp(
+            nextX,
+            -9,
+            9
+        );
+
+    const change =
+        (Math.random()-.5)*2.8;
+
+    let nextY =
+        lastY + change;
+
+    nextY =
+        THREE.MathUtils.clamp(
+            nextY,
+            1,
+            18
+        );
+
+    createPlatform(
+        nextX,
+        nextY,
+        nextZ
+    );
+
+    lastX = nextX;
+    lastY = nextY;
+    lastZ = nextZ;
+}
+
+
+/* ==========================================
+   3D BAYRAK SİSTEMİ
+========================================== */
+
+const flags = [];
+
+
+/*
+   Bayrağın direği
+*/
+
+function createFlag(
+    platformIndex,
+    color,
+    number
+){
+
+    const p =
+        platforms[platformIndex];
+
+    const group =
+        new THREE.Group();
+
+    /*
+       Direk
+    */
+
+    const pole =
+        new THREE.Mesh(
+
+            new THREE.CylinderGeometry(
+                .10,
+                .13,
+                4.2,
+                20
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0xdddddd,
+                metalness:.65,
+                roughness:.25
+            })
+        );
+
+    pole.position.y =
+        2.1;
+
+    group.add(pole);
+
+
+    /*
+       Direğin üst topuzu
+    */
+
+    const top =
+        new THREE.Mesh(
+
+            new THREE.SphereGeometry(
+                .18,
+                24,
+                24
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0xffffff,
+                metalness:.7,
+                roughness:.2
+            })
+        );
+
+    top.position.y =
+        4.25;
+
+    group.add(top);
+
+
+    /*
+       Bayrak kumaşı
+    */
+
+    const flagWidth = 2.6;
+    const flagHeight = 1.5;
+
+    const geometry =
+        new THREE.PlaneGeometry(
+            flagWidth,
+            flagHeight,
+            8,
+            4
+        );
+
+    /*
+       Kumaşa hafif dalga veriyoruz.
+    */
+
+    const positions =
+        geometry.attributes.position;
+
+    for(
+        let i=0;
+        i<positions.count;
+        i++
+    ){
+
+        const x =
+            positions.getX(i);
+
+        const y =
+            positions.getY(i);
+
+        const wave =
+            Math.sin(
+                (x+1.3)*2.2
+            ) * .10;
+
+        positions.setZ(
+            i,
+            wave
+        );
+    }
+
+    geometry.computeVertexNormals();
+
+    const material =
+        new THREE.MeshStandardMaterial({
+
+            color:color,
+
+            side:THREE.DoubleSide,
+
+            roughness:.65
+        });
+
+    const cloth =
+        new THREE.Mesh(
+            geometry,
+            material
+        );
+
+    /*
+       Direğin sağ tarafına
+       bayrağı takıyoruz.
+    */
+
+    cloth.position.set(
+        1.3,
+        3.35,
+        0
+    );
+
+    group.add(cloth);
+
+
+    /*
+       Bayrağın altına küçük yatay
+       destek çubuğu.
+    */
+
+    const horizontal =
+        new THREE.Mesh(
+
+            new THREE.CylinderGeometry(
+                .055,
+                .055,
+                2.5,
+                12
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0xdddddd,
+                metalness:.5
+            })
+        );
+
+    horizontal.rotation.z =
+        Math.PI/2;
+
+    horizontal.position.set(
+        1.25,
+        2.6,
+        0
+    );
+
+    group.add(horizontal);
+
+
+    /*
+       Platform üzerine yerleştir.
+    */
+
+    group.position.set(
+        p.x,
+        p.top,
+        p.z
+    );
+
+    scene.add(group);
+
+
+    flags.push({
+
+        group,
+
+        platform:p,
+
+        cloth,
+
+        collected:false,
+
+        number
+
+    });
+}
+
+
+/*
+   %35
+*/
+
+const flag1Index =
+    Math.floor(
+        TOTAL_PLATFORMS*.35
+    );
+
+
+/*
+   %60
+*/
+
+const flag2Index =
+    Math.floor(
+        TOTAL_PLATFORMS*.60
+    );
+
+
+/*
+   Final
+*/
+
+const flag3Index =
+    TOTAL_PLATFORMS-1;
+
+
+createFlag(
+    flag1Index,
+    0xff2020,
+    1
+);
+
+createFlag(
+    flag2Index,
+    0x2060ff,
+    2
+);
+
+createFlag(
+    flag3Index,
+    0x20cc55,
+    3
+);
+
+
+/* ==========================================
+   TOP
+========================================== */
+
+const BALL_RADIUS = 1;
+
+const ball =
+    new THREE.Group();
+
+ball.position.set(
+    0,
+    2.3,
+    0
+);
+
+scene.add(ball);
+
+
+/* Lacivert top */
+
+const mainBall =
+    new THREE.Mesh(
+        new THREE.SphereGeometry(
+            BALL_RADIUS,
+            64,
+            64
+        ),
+        new THREE.MeshStandardMaterial({
+            color:0x001f5b,
+            roughness:.3
+        })
+    );
+
+ball.add(mainBall);
+
+
+/* ==========================================
+   BEYAZ DESENLER
+========================================== */
+
+const patternMaterial =
+    new THREE.MeshStandardMaterial({
+        color:0xffffff,
+        roughness:.3
+    });
+
+const ring1 =
+    new THREE.Mesh(
+        new THREE.TorusGeometry(
+            1.015,
+            .11,
+            18,
+            64
+        ),
+        patternMaterial
+    );
+
+ring1.rotation.x =
+    Math.PI/2;
+
+ball.add(ring1);
+
+
+const ring2 =
+    new THREE.Mesh(
+        new THREE.TorusGeometry(
+            1.015,
+            .10,
+            18,
+            64
+        ),
+        patternMaterial
+    );
+
+ball.add(ring2);
+
+
+const ring3 =
+    new THREE.Mesh(
+        new THREE.TorusGeometry(
+            1.015,
+            .08,
+            18,
+            64
+        ),
+        patternMaterial
+    );
+
+ring3.rotation.y =
+    Math.PI/2;
+
+ball.add(ring3);
+
+
+function addPatch(
+    x,
+    y,
+    z
+){
+
+    const patch =
+        new THREE.Mesh(
+            new THREE.SphereGeometry(
+                .27,
+                24,
+                24
+            ),
+            patternMaterial
+        );
+
+    patch.position.set(
+        x,
+        y,
+        z
+    );
+
+    ball.add(patch);
+}
+
+addPatch(0,0,1.01);
+addPatch(0,0,-1.01);
+addPatch(1.01,0,0);
+addPatch(-1.01,0,0);
+addPatch(0,1.01,0);
+addPatch(0,-1.01,0);
+
+
+/* ==========================================
+   JOYSTICK
+========================================== */
+
+const left = {
+    x:0,
+    y:0,
+    active:false
+};
+
+function setupJoystick(
+    element,
+    data
+){
+
+    const stick =
+        element.querySelector(".stick");
+
+    let pointerId = null;
+
+    const maxDistance = 34;
+
+    function update(
+        clientX,
+        clientY
+    ){
+
+        const rect =
+            element.getBoundingClientRect();
+
+        const centerX =
+            rect.left+
+            rect.width/2;
+
+        const centerY =
+            rect.top+
+            rect.height/2;
+
+        let dx =
+            clientX-centerX;
+
+        let dy =
+            clientY-centerY;
+
+        const distance =
+            Math.sqrt(
+                dx*dx+
+                dy*dy
+            );
+
+        if(
+            distance>maxDistance
+        ){
+
+            dx =
+                dx/distance*
+                maxDistance;
+
+            dy =
+                dy/distance*
+                maxDistance;
+        }
+
+        data.x =
+            dx/maxDistance;
+
+        data.y =
+            dy/maxDistance;
+
+        stick.style.transform =
+            `translate(
+                calc(-50% + ${dx}px),
+                calc(-50% + ${dy}px)
+            )`;
+    }
+
+    function reset(){
+
+        data.x=0;
+        data.y=0;
+        data.active=false;
+
+        stick.style.transform =
+            "translate(-50%,-50%)";
+
+        pointerId=null;
+    }
+
+    element.addEventListener(
+        "pointerdown",
+        e=>{
+
+            pointerId=e.pointerId;
+
+            data.active=true;
+
+            element.setPointerCapture(
+                pointerId
+            );
+
+            update(
+                e.clientX,
+                e.clientY
+            );
+        }
+    );
+
+    element.addEventListener(
+        "pointermove",
+        e=>{
+
+            if(
+                e.pointerId!==pointerId
+            ){
+                return;
+            }
+
+            update(
+                e.clientX,
+                e.clientY
+            );
+        }
+    );
+
+    element.addEventListener(
+        "pointerup",
+        e=>{
+
+            if(
+                e.pointerId===pointerId
+            ){
+                reset();
+            }
+        }
+    );
+
+    element.addEventListener(
+        "pointercancel",
+        reset
+    );
+}
+
+setupJoystick(
+    document.getElementById(
+        "leftJoystick"
+    ),
+    left
+);
+
+
+/* ==========================================
+   ZIPLAMA
+========================================== */
+
+const jumpButton =
+    document.getElementById(
+        "jumpButton"
+    );
+
+let jumpRequested=false;
+
+jumpButton.addEventListener(
+    "pointerdown",
+    ()=>{
+        jumpRequested=true;
+    }
+);
+
+
+/* ==========================================
+   FİZİK
+========================================== */
+
+let velocityX=0;
+let velocityZ=0;
+let velocityY=0;
+
+const gravity=-22;
+const jumpPower=11;
+
+
+/* ==========================================
+   CHECKPOINT
+========================================== */
+
+/*
+   0 = başlangıç
+   1 = kırmızı bayrak
+   2 = mavi bayrak
+   3 = yeşil/final bayrak
+*/
+
+let checkpointIndex=0;
+
+const checkpointUI =
+    document.getElementById(
+        "checkpoint"
+    );
+
+
+let checkpointPosition = {
+
+    x:0,
+    y:2.3,
+    z:0
+
+};
+
+
+function activateCheckpoint(
+    index
+){
+
+    if(
+        index<=checkpointIndex
+    ){
+        return;
+    }
+
+    checkpointIndex=index;
+
+    const flag =
+        flags[index-1];
+
+    checkpointPosition = {
+
+        x:flag.platform.x,
+
+        y:
+            flag.platform.top+
+            BALL_RADIUS,
+
+        z:flag.platform.z
+
+    };
+
+
+    if(index===1){
+
+        checkpointUI.textContent =
+            "🏁 1. Checkpoint";
+
+    }
+
+    else if(index===2){
+
+        checkpointUI.textContent =
+            "🏁 2. Checkpoint";
+
+    }
+
+    else if(index===3){
+
+        checkpointUI.textContent =
+            "🏆 FİNAL BAYRAĞI";
+
+    }
+
+
+    /*
+       Bayrağı kısa süreliğine
+       parlat.
+    */
+
+    flag.group.scale.set(
+        1.25,
+        1.25,
+        1.25
+    );
+
+    setTimeout(
+        ()=>{
+            flag.group.scale.set(
+                1,
+                1,
+                1
+            );
+        },
+        400
+    );
+}
+
+
+/* ==========================================
+   BAYRAK KONTROLÜ
+========================================== */
+
+let gameWon=false;
+
+function checkFlags(){
+
+    for(
+        const flag of flags
+    ){
+
+        if(
+            flag.collected
+        ){
+            continue;
+        }
+
+        const dx =
+            ball.position.x -
+            flag.platform.x;
+
+        const dz =
+            ball.position.z -
+            flag.platform.z;
+
+        const distance =
+            Math.sqrt(
+                dx*dx+
+                dz*dz
+            );
+
+        /*
+           Bayrağın bulunduğu platforma
+           geldiğimizde checkpoint aktif.
+        */
+
+        if(
+            distance<3
+        ){
+
+            flag.collected=true;
+
+            activateCheckpoint(
+                flag.number
+            );
+
+
+            /*
+               Üçüncü bayrak:
+               oyun bitti.
+            */
+
+            if(
+                flag.number===3
+            ){
+
+                gameWon=true;
+
+                document
+                    .getElementById(
+                        "winScreen"
+                    )
+                    .classList
+                    .add("show");
+
+                velocityX=0;
+                velocityZ=0;
+                velocityY=0;
+            }
+        }
+    }
+}
+
+
+/* ==========================================
+   PLATFORM ÇARPIŞMASI
+========================================== */
+
+function checkPlatformCollisions(
+    previousY
+){
+
+    for(
+        const p of platforms
+    ){
+
+        const halfW =
+            p.width/2;
+
+        const halfD =
+            p.depth/2;
+
+
+        const insideX =
+            ball.position.x+
+            BALL_RADIUS>
+            p.x-halfW;
+
+        const insideX2 =
+            ball.position.x-
+            BALL_RADIUS<
+            p.x+halfW;
+
+        const insideZ =
+            ball.position.z+
+            BALL_RADIUS>
+            p.z-halfD;
+
+        const insideZ2 =
+            ball.position.z-
+            BALL_RADIUS<
+            p.z+halfD;
+
+
+        if(
+            !insideX||
+            !insideX2||
+            !insideZ||
+            !insideZ2
+        ){
+            continue;
+        }
+
+
+        /* ÜSTTEN ÇARPMA */
+
+        const previousBottom =
+            previousY-
+            BALL_RADIUS;
+
+        const currentBottom =
+            ball.position.y-
+            BALL_RADIUS;
+
+
+        if(
+            velocityY<=0&&
+            previousBottom>=
+                p.top-.05&&
+            currentBottom<=
+                p.top+.08
+        ){
+
+            ball.position.y =
+                p.top+
+                BALL_RADIUS;
+
+            velocityY=0;
+
+            continue;
+        }
+
+
+        /* ALTTAN ÇARPMA */
+
+        const previousTop =
+            previousY+
+            BALL_RADIUS;
+
+        const currentTop =
+            ball.position.y+
+            BALL_RADIUS;
+
+
+        if(
+            velocityY>0&&
+            previousTop<=
+                p.bottom+.05&&
+            currentTop>=
+                p.bottom
+        ){
+
+            ball.position.y =
+                p.bottom-
+                BALL_RADIUS-
+                .01;
+
+            velocityY=0;
+        }
+    }
+}
+
+
+/* ==========================================
+   KAMERA
+========================================== */
+
+const cameraAngle =
+    Math.PI;
+
+const cameraDistance =
+    9;
+
+const cameraHeight =
+    5;
+
+
+/* ==========================================
+   OYUN
+========================================== */
+
+const clock =
+    new THREE.Clock();
+
+
+function animate(){
+
+    requestAnimationFrame(
+        animate
+    );
+
+    const delta =
+        Math.min(
+            clock.getDelta(),
+            .05
+        );
+
+
+    if(
+        !gameWon
+    ){
+
+        const previousY =
+            ball.position.y;
+
+
+        /* Hareket */
+
+        const strength =
+            Math.min(
+                Math.sqrt(
+                    left.x*left.x+
+                    left.y*left.y
+                ),
+                1
+            );
+
+
+        if(
+            strength>.05
+        ){
+
+            /*
+               SOL = SOL
+               SAĞ = SAĞ
+               YUKARI = İLERİ
+               AŞAĞI = GERİ
+            */
+
+            velocityX =
+                left.x*8;
+
+            velocityZ =
+                left.y*8;
+
+        }
+        else{
+
+            velocityX *=
+                Math.pow(
+                    .001,
+                    delta
+                );
+
+            velocityZ *=
+                Math.pow(
+                    .001,
+                    delta
+                );
+        }
+
+
+        /* Yatay hareket */
+
+        ball.position.x +=
+            velocityX*delta;
+
+        ball.position.z +=
+            velocityZ*delta;
+
+
+        /* Zıplama */
+
+        if(
+            jumpRequested
+        ){
+
+            let onPlatform=false;
+
+            for(
+                const p of platforms
+            ){
+
+                const dx =
+                    Math.abs(
+                        ball.position.x-p.x
+                    );
+
+                const dz =
+                    Math.abs(
+                        ball.position.z-p.z
+                    );
+
+                const dy =
+                    Math.abs(
+                        (
+                            ball.position.y-
+                            BALL_RADIUS
+                        )-
+                        p.top
+                    );
+
+                if(
+                    dx<
+                        p.width/2-.1&&
+                    dz<
+                        p.depth/2-.1&&
+                    dy<.15
+                ){
+
+                    onPlatform=true;
+                    break;
+                }
+            }
+
+
+            if(
+                onPlatform&&
+                Math.abs(velocityY)<.2
+            ){
+
+                velocityY=
+                    jumpPower;
+            }
+
+            jumpRequested=false;
+        }
+
+
+        /* Yerçekimi */
+
+        velocityY +=
+            gravity*delta;
+
+        ball.position.y +=
+            velocityY*delta;
+
+
+        /* Platform */
+
+        checkPlatformCollisions(
+            previousY
+        );
+
+
+        /* Bayraklar */
+
+        checkFlags();
+
+
+        /*
+           Bayrak kumaşlarına
+           hafif dalgalanma efekti.
+        */
+
+        for(
+            const flag of flags
+        ){
+
+            if(
+                flag.collected
+            ){
+                continue;
+            }
+
+            flag.cloth.rotation.y =
+                Math.sin(
+                    performance.now()*.002
+                )*.08;
+        }
+
+
+        /* Lava düşme */
+
+        if(
+            ball.position.y<-1
+        ){
+
+            /*
+               Son checkpoint'e dön.
+            */
+
+            ball.position.set(
+
+                checkpointPosition.x,
+
+                checkpointPosition.y,
+
+                checkpointPosition.z
+
+            );
+
+            velocityX=0;
+            velocityZ=0;
+            velocityY=0;
+        }
+
+
+        /* Top dönüşü */
+
+        const horizontalSpeed =
+            Math.sqrt(
+                velocityX*velocityX+
+                velocityZ*velocityZ
+            );
+
+
+        if(
+            horizontalSpeed>.01
+        ){
+
+            const axis =
+                new THREE.Vector3(
+                    velocityZ,
+                    0,
+                    -velocityX
+                );
+
+            axis.normalize();
+
+            ball.rotateOnWorldAxis(
+                axis,
+                horizontalSpeed*delta
+            );
+        }
+    }
+
+
+    /* ======================================
+       KAMERA
+    ====================================== */
+
+    const cameraX =
+        ball.position.x-
+        Math.sin(cameraAngle)*
+        cameraDistance;
+
+    const cameraZ =
+        ball.position.z-
+        Math.cos(cameraAngle)*
+        cameraDistance;
+
+
+    camera.position.x +=
+        (
+            cameraX-
+            camera.position.x
+        )*.12;
+
+
+    camera.position.y +=
+        (
+            ball.position.y+
+            cameraHeight-
+            camera.position.y
+        )*.12;
+
+
+    camera.position.z +=
+        (
+            cameraZ-
+            camera.position.z
+        )*.12;
+
+
+    camera.lookAt(
+        ball.position.x,
+        ball.position.y+.3,
+        ball.position.z
+    );
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+}
+
+
+animate();
+
+
+/* ==========================================
+   EKRAN BOYUTU
+========================================== */
+
+window.addEventListener(
+    "resize",
+    ()=>{
+
+        camera.aspect =
+            window.innerWidth/
+            window.innerHeight;
+
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+        );
+    }
+);
+
+</script>
+
+</body>
+</html>
